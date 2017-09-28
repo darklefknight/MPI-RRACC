@@ -10,6 +10,7 @@ from netCDF4 import Dataset
 import matplotlib.pyplot as plt
 from datetime import datetime as dt
 from calendar import timegm
+import argparse
 
 #----------------------------------------------------------------------------------------------------------------------
 # =========================================
@@ -29,12 +30,18 @@ class Radar:
         self._VEL = nc.variables['VEL'][:].copy() # "vertical velocity of all Hydrometeors"
         nc.close()
 
-        self._time = self.dt_obj(self._time)
+        self._obj_time = []
+        self.__time2obj()
 
-    def dt_obj(self,u):
+    def __time2obj(self):
+        for element in self._time:
+            self._obj_time.append(self.__dt_obj(element))
+        self._obj_time = np.asarray(self._obj_time)
+
+    def __dt_obj(self,u):
         return dt.utcfromtimestamp(u)
 
-    def ut_obj(self,d):
+    def __ut_obj(self,d):
         return timegm(d.timetuple())
 
     def time(self,shape="dt"):
@@ -46,10 +53,10 @@ class Radar:
         """
 
         if shape == "dt":
-            return self._time
+            return self._obj_time
 
         elif shape == "ut":
-            return self.ut_obj(self._time)
+            return self._time
 
     def range(self):
         return self._range
@@ -72,8 +79,15 @@ def plotMe():
 if __name__ == "__main__":
     NC_PATH = "/data/mpi/mpiaes/obs/m300517/RadarCorrection/MBR2_out/"
 
-    datestr = "170904" #format: YYMMDD
+    # Get parsed arguments:
+    parser = argparse.ArgumentParser(description="example: RRACC.py 20170401",prog="RRACC.py")
+    parser.add_argument('datestr',metavar='t', help='add date-argument YYYYMMDD',type=int)
+    args = str(parser.parse_args().datestr)
+    print(args)
+    datestr = args[2:]
+
     NC_FILE = "MMCR__MBR__Spectral_Moments__10s__155m-25km__" + datestr + ".nc"
 
+    #Initiate class:
     MBR2 = Radar(NC_PATH+NC_FILE)
 
