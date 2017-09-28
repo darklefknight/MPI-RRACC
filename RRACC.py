@@ -12,6 +12,7 @@ from datetime import datetime as dt
 from calendar import timegm
 import argparse
 import sys
+from joblib import Parallel,delayed
 
 #----------------------------------------------------------------------------------------------------------------------
 # =========================================
@@ -30,6 +31,8 @@ class RadarClass:
         self._MeltHeight = nc.variables['MeltHei'][:].copy() # Height of the meltinglayer in m
         self._VEL = nc.variables['VEL'][:].copy() # "vertical velocity of all Hydrometeors"
         nc.close()
+
+        self._cloudMask = np.asarray(self._Zf)
 
         self._obj_time = []
         self.__time2obj()
@@ -71,16 +74,32 @@ class RadarClass:
     def VEL(self):
         return self._VEL
 
-#----------------------------------------------------------------------------------------------------------------------
 
-def contourf_plot(MBR2):
-    plt.contourf(MBR2.time(),MBR2.range(),MBR2.Zf().transpose(),cmap="jet")
+# ----------------------------------------------------------------------------------------------------------------------
+
+def contourf_plot(MBR2,value):
+    plt.contourf(MBR2.time(),MBR2.range(),value.transpose(),cmap="jet")
     plt.ylim(0,10000)
 
+def calculateCloudMask(i):
+    for j in range(len(Radar.range())):
+        if Radar.VEL()[i, j] < -1:
+            cloudMask[i,j] =  0
+        elif Radar.Zf()[i, j] > -50 and Radar.VEL()[i, j] > -1:
+            cloudMask[i, j] = 30
+        elif Radar.Zf()[i, j] < -50:
+            cloudMask[i, j] = -50
+        else:
+            cloudMask[i,j] = np.nan
 
+
+def getCloudMask(parallel=True):
+    if parallel:
+        Parallel(n_jobs=-1, verbose=5)(delayed(calculateCloudMask())(i) for i in range(len(Radar.time())))
+    else:
+        [calculateCloudMask(i) for i in range(len(Radar.time()))]
 
 if __name__ == "__main__":
-
 
     # Get parsed arguments:
     parser = argparse.ArgumentParser(description="example: RRACC.py 20170401",prog="RRACC.py")
@@ -107,4 +126,10 @@ if __name__ == "__main__":
 
     #Initiate class:
     Radar = RadarClass(NC_PATH+NC_FILE)
-    contourf_plot(Radar)
+
+    #TODO: Put this later in the RadarClass as function:
+    cloudMask = np.asarray(Radar.Zf())
+    getCloudMask(parallel=True)
+
+
+    contourf_plot(Radar,cloudMask)
