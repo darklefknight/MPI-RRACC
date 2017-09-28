@@ -11,12 +11,13 @@ import matplotlib.pyplot as plt
 from datetime import datetime as dt
 from calendar import timegm
 import argparse
+import sys
 
 #----------------------------------------------------------------------------------------------------------------------
 # =========================================
 # Radar Class
 # =========================================
-class Radar:
+class RadarClass:
     """
     Class for working with Radar data.
     For initialisation it needs the path of a netCDF-file with Radar-data.
@@ -72,22 +73,38 @@ class Radar:
 
 #----------------------------------------------------------------------------------------------------------------------
 
-def plotMe():
-    pass
+def contourf_plot(MBR2):
+    plt.contourf(MBR2.time(),MBR2.range(),MBR2.Zf().transpose(),cmap="jet")
+    plt.ylim(0,10000)
+
 
 
 if __name__ == "__main__":
-    NC_PATH = "/data/mpi/mpiaes/obs/m300517/RadarCorrection/MBR2_out/"
+
 
     # Get parsed arguments:
     parser = argparse.ArgumentParser(description="example: RRACC.py 20170401",prog="RRACC.py")
     parser.add_argument('datestr',metavar='t', help='add date-argument YYYYMMDD',type=int)
-    args = str(parser.parse_args().datestr)
-    print(args)
-    datestr = args[2:]
+    parser.add_argument('--device', dest='device', help='specify a device. Allowed: MBR2, KATRIN. Default: MBR2', default="MBR2")
+    args = parser.parse_args()
+    datestr = str(args.datestr)
+    print(datestr)
+    datestr = datestr[2:]
 
-    NC_FILE = "MMCR__MBR__Spectral_Moments__10s__155m-25km__" + datestr + ".nc"
+    # Set nc-file depending on parsed argument:
+    DEVICE = str(args.device)
+    if DEVICE == "MBR2":
+        NC_PATH = "/data/mpi/mpiaes/obs/m300517/RadarCorrection/MBR2_out/"
+        NC_FILE = "MMCR__MBR__Spectral_Moments__10s__155m-25km__" + datestr + ".nc"
+
+    elif DEVICE == "KATRIN":
+        NC_PATH = "/data/mpi/mpiaes/obs/m300517/RadarCorrection/KATRIN_out/"
+        NC_FILE = "MMCR__KATRIN__Spectral_Moments__10s__300m-15km__" + datestr + ".nc"
+
+    else:
+        print("InputError: --device can be either MBR2 or KATRIN")
+        sys.exit(1)
 
     #Initiate class:
-    MBR2 = Radar(NC_PATH+NC_FILE)
-
+    Radar = RadarClass(NC_PATH+NC_FILE)
+    contourf_plot(Radar)
