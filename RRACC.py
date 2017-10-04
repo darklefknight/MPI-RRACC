@@ -8,6 +8,8 @@ RRACC stands for "Radar Rain and Cloud Classification"
 import numpy as np
 from netCDF4 import Dataset
 import matplotlib.pyplot as plt
+from  matplotlib.cm import get_cmap
+from matplotlib.colors import Normalize
 from datetime import datetime as dt
 from calendar import timegm
 import argparse
@@ -27,11 +29,11 @@ class RadarClass:
     functions: \n
         Internal:\n
         - __init__:          initializes the class. :param nc_FilePath: Path of a netCDF-file containing Radar-data\n
-        - __time2obj:        convertes epoche-time to datetime-objects\n
+        - __time2obj:        converts epoche-time to datetime-objects\n
         - __getCloudMask:    calculates the cloud mask\n
         - __getRainMask:     calculates the rain mask\n
         - below:             just for testing and debugging\n
-        - __dt_obj:          convertes seconds since epoche to a datetime-object\n
+        - __dt_obj:          converts seconds since epoche to a datetime-object\n
         - __ut_obj:          converts a datetime-obejct to seconds since epoche\n
 
         External:\n
@@ -72,7 +74,7 @@ class RadarClass:
 
     def __time2obj(self):
         for element in self._time:
-            self._obj_time.append(self.__dt_obj(element))
+            self._obj_time.append(dt.replace(self.__dt_obj(element),tzinfo=None))
         self._obj_time = np.asarray(self._obj_time)
 
     def __getCloudMask(self):
@@ -177,6 +179,47 @@ def contourf_plot(MBR2, value):
     fig.colorbar(cf2,ax=ax2,label="[mm/h]")
     ax2.legend(loc="best")
     ax2.set_title("Precipitation rate")
+
+# ----------------------------------------------------------------------------------------------------------------------
+
+def getColorFromValue(min, max, array, cmap="jet"):
+    """
+    Converts a 2D valaue array to rgb-colors.
+
+    :param min: minimum of the array
+    :param max: maximum of the array
+    :param array: 2D array
+    :param cmap: string of the colormap to use
+
+    :return: 3D color-array
+    """
+    norm = Normalize(vmin=min,vmax=max)
+    relative_value = norm(array)
+    color_map = get_cmap(cmap)
+    color = color_map(relative_value)
+    print(np.shape(color))
+    color[:,:,0:3] *= 255
+    return color
+
+
+
+
+
+def getColormapAsList(steps=100,cmap="jet"):
+    def clamp(x):
+        return int(max(0, min(x, 255)))
+
+    values = np.linspace(0,1,steps)
+    color_map = get_cmap(cmap)
+
+    colors = []
+    for value in values:
+        color = color_map(value)
+        colors.append("#{0:02x}{1:02x}{2:02x}".format(clamp(color[0]*255), clamp(color[1]*255), clamp(color[2]*255)))
+
+    return colors
+
+
 
 
 if __name__ == "__main__":
