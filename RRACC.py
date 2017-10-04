@@ -21,10 +21,34 @@ from joblib import Parallel, delayed
 # =========================================
 class RadarClass:
     """
-    Class for working with Radar data.
-    For initialisation it needs the path of a netCDF-file with Radar-data.
+    Class for working with Radar data. \n
+    For initialisation it needs the path of a netCDF-file with Radar-data. \n
+
+    functions: \n
+        Internal:\n
+        - __init__:          initializes the class. :param nc_FilePath: Path of a netCDF-file containing Radar-data\n
+        - __time2obj:        convertes epoche-time to datetime-objects\n
+        - __getCloudMask:    calculates the cloud mask\n
+        - __getRainMask:     calculates the rain mask\n
+        - below:             just for testing and debugging\n
+        - __dt_obj:          convertes seconds since epoche to a datetime-object\n
+        - __ut_obj:          converts a datetime-obejct to seconds since epoche\n
+
+        External:\n
+        - print_nc_infos:    prints information of the netCDF-file \n
+        - time:              returns a 1D array containing the time as datetime-objects \n
+        - range:             returns a 1D array containing the range-gates in m \n
+        - Zf:                returns a 1D array containing the reflectivity in dBz \n
+        - MeltHeight:        returns a 1D array containing the height of the melting layer in m \n
+        - VEL:               returns a 1D array containing the doppler vertical velocity in m/s \n
+        - cloudMask():       returns a 2D array containing a cloud-mask (see __getClodMask for more info) \n
+        - rainMask():        returns a 2D array containing a rain-mask (see __getRainMask for more info) \n
+        - rainRate():        retunrs a 2D array containing the rain intensity in mm/h \n
     """
     def __init__(self, nc_FilePath:str):
+        """
+        :param nc_FilePath: Path of a netCDF-file containing Radar-data
+        """
         nc = Dataset(nc_FilePath)
         self._time = nc.variables['time'][:].copy()  # time in sec since 1970
         self._range = nc.variables['range'][:].copy()  # range in m
