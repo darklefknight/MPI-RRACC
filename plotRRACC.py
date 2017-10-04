@@ -59,52 +59,74 @@ else:
 # Initiate class:
 Radar = RadarClass(NC_PATH + NC_FILE)
 
-Radar_var = Radar.Zf()
-# Radar_var[np.isnan(Radar_var)] = -999
+Toolbox = "save,box_zoom,pan,wheel_zoom,undo"
+p1 = figure(title="Radar Rain and Cloud Classification", tools=Toolbox, responsive=True, x_axis_type='datetime',
+            y_range=Range1d(0, Radar.range()[-1], bounds="auto"),
+            x_range=Range1d(Radar.time()[0], Radar.time()[-1], bounds="auto"),
+            )  # set up the first plot
 
-# ========== get Colors =====================
-max_dbz = np.nanmax(Radar_var)
-min_dbz = np.nanmin(Radar_var)
-rangeGateHeight = Radar.range()[2] - Radar.range()[1]
-rgb = getColormapAsList()
-
-# ========== prepare data for plotting ==============
-df = pd.DataFrame(Radar_var, index=Radar.time(), columns=Radar.range())
-df.columns.name = "range"
-df.index.name = "time"
-df1 = pd.DataFrame(df.stack(), columns=['data']).reset_index()
-
-source = ColumnDataSource(df1)
 meltsource = ColumnDataSource(
     data=dict(
         x=Radar.time(),
         y=Radar.MeltHeight(),
     )
 )
-mapper = LinearColorMapper(palette=rgb, low=min_dbz, high=max_dbz)
-# ====================================
+p1.line(x="x", y="y", source=meltsource, line_color="black", line_dash="dashed", line_width=2, legend="Melting Layer Height")
 
-Toolbox = "save,box_zoom,pan,wheel_zoom"
-p1 = figure(title="Radar Rain and Cloud Classification", tools=Toolbox, responsive=True, x_axis_type='datetime',
-            y_range=Range1d(0, Radar.range()[-1], bounds="auto"),
-            x_range=Range1d(Radar.time()[0], Radar.time()[-1], bounds="auto"),
-            )  # set up the first plot
+contourlist = []
+colorbarlist = []
+def contourfPlot(Radar_var,name, minmax=None):
+    # ========== get Colors =====================
+    if minmax == None:
+        max_dbz = np.nanmax(Radar_var)
+        min_dbz = np.nanmin(Radar_var)
+    else:
+        min_dbz,max_dbz = minmax
 
-p1.line(x="x", y="y", source=meltsource, line_color="black", line_dash="dashed", line_width=2)
-cf = p1.rect(x="time", y="range", height=rangeGateHeight, width=timedelta(seconds=time_resolution), source=source,
-             fill_color={'field': 'data', 'transform': mapper}, )
-cf.glyph.line_color = cf.glyph.fill_color
 
-p1.plot_width = 1300
-p1.plot_height = 1000
-p1.sizing_mode = "scale_width"
+    rangeGateHeight = Radar.range()[2] - Radar.range()[1]
+    rgb = getColormapAsList()
 
-# Colorbar:
-color_bar = ColorBar(color_mapper=mapper, major_label_text_font_size="10pt",
-                     ticker=BasicTicker(desired_num_ticks=int(len(rgb) / 2)),
-                     formatter=PrintfTickFormatter(format="%d"),
-                     label_standoff=6, border_line_color=None, location=(0, 0))
-p1.add_layout(color_bar, 'right')
+    # ========== prepare data for plotting ==============
+    df = pd.DataFrame(Radar_var, index=Radar.time(), columns=Radar.range())
+    df.columns.name = "range"
+    df.index.name = "time"
+    df1 = pd.DataFrame(df.stack(), columns=['data']).reset_index()
+
+    source = ColumnDataSource(df1)
+
+    mapper = LinearColorMapper(palette=rgb, low=min_dbz, high=max_dbz)
+    # ====================================
+
+
+    cf = p1.rect(x="time", y="range", height=rangeGateHeight, width=timedelta(seconds=time_resolution), source=source,
+                 fill_color={'field': 'data', 'transform': mapper}, legend=name )
+    cf.glyph.line_color = cf.glyph.fill_color
+
+    contourlist.append(cf)
+    p1.plot_width = 1300
+    p1.plot_height = 1000
+    p1.sizing_mode = "scale_width"
+
+    # Colorbar:
+    color_bar = ColorBar(color_mapper=mapper, major_label_text_font_size="10pt",
+                         ticker=BasicTicker(desired_num_ticks=int(len(rgb) / 2)),
+                         formatter=PrintfTickFormatter(format="%d"),
+                         label_standoff=6, border_line_color=None, location=(0, 0))
+    colorbarlist.append(color_bar)
+
+
+contourfPlot(Radar.cloudMask(),"cloudMask")
+contourfPlot(Radar.rainRate(),"rainRate",minmax=(0,10))
+
+colorbarlist[0].title = "Cloudmask-value"
+colorbarlist[1].title = "Rain rate [mm/h]"
+
+
+p1.add_layout(colorbarlist[0],"left")
+p1.add_layout(colorbarlist[1],"right")
+contourlist[0].glyph.fill_alpha = 0.2
+contourlist[0].glyph.line_alpha = 0
 
 # Hover-tool:
 hover = HoverTool(
@@ -117,7 +139,8 @@ hover = HoverTool(
     }
 )
 p1.add_tools(hover)
-
 grid = gridplot([[p1]])
 
 show(grid)
+
+#TODO: Add buttons to switch between plots
