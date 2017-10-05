@@ -56,36 +56,71 @@ class RadarClass:
         self._range = nc.variables['range'][:].copy()  # range in m
         self._Zf = nc.variables['Zf'][:].copy()  # filtered reflectivity
         self._MeltHeight = nc.variables['MeltHei'][:].copy()  # Height of the meltinglayer in m
-        self._VEL = nc.variables['VEL'][:].copy()  # "vertical velocity of all Hydrometeors"
+        self._VEL = nc.variables['VEL'][:].copy()  # vertical velocity of all hydrometeors
+        self._VELg = nc.variables['VELg'][:].copy() # Doppler velocity of all targets
+        self._LDR = nc.variables['LDR'][:].copy()
         self.print_nc_infos(nc)
         nc.close()
 
         self._cloudMask = np.asarray(self._Zf).copy()
         self._rainMask = np.asarray(self._Zf).copy()
         self._rainRate = np.asarray(self._Zf).copy()
-        self.Below0C = np.asarray(self._Zf)
+        self._notSphericMask = np.asarray(self._VELg).copy()
 
         self._obj_time = []
 
-        # functions to be executed on initiate:
+        # functions to be executed on initiation:
         self.__time2obj()  # creates datetime-objects from "time"
         self.__getCloudMask()  # creates a cloudmask
         self.__getRainMask()  # creates a rainmask
+        self.__getNotSpheric() #gets a mask for all not spheric particles
+
 
     def __time2obj(self):
         for element in self._time:
             self._obj_time.append(dt.replace(self.__dt_obj(element),tzinfo=None))
         self._obj_time = np.asarray(self._obj_time)
 
+    def __getNotSpheric(self):
+        self._notSphericMask[self._notSphericMask > -99999] = False
+        # self._notSphericMask[]
+
     def __getCloudMask(self):
+        """
+        Creates a cloud mask.
+        Values stand for:
+        -50 = cloud-beard
+        0 = rain
+        10 = updraft in cloud
+        20 = cloud above melting layer
+        25 = cloud below melting layer
+
+        :return:
+        """
         # TODO: Unterscheidung zwischen Cirrus und Cumulus via LDR and Melting Layer hight
 
         self._cloudMask[self._cloudMask > -99999] = np.nan # set complete array to nan
-        self._cloudMask[np.logical_and(self.VEL() > -1, self._Zf <= 0)] = 10# downdrafts in cloud
+        self._cloudMask[np.logical_and(self.VEL() < -1, self._Zf <= 0)] = 10# downdraft in cloud
         self._cloudMask[np.logical_and((self.Zf() > -50), (self.VEL() > -1))] = 30  # cloud
         self._cloudMask[self.Zf() <= -50] = -50  # cloud-beards
 
         self._cloudMask[self.VEL() <= -1] = 0  # rain
+
+        __Below0CloudMask = np.asarray(self._cloudMask).copy()
+        __Below0CloudMask = [__Below0CloudMask == -99999][0]
+        __Below0CloudBeard = np.asarray(self._cloudMask).copy()
+        __Below0CloudBeard = [__Below0CloudBeard == -99999][0]
+
+        for i in range(len(self._time)):
+            __Below0CloudMask[i][np.where(self._range < self._MeltHeight[i])] = True
+            __Below0CloudBeard[i][np.where(self._range < self._MeltHeight[i])] = True
+
+        self._cloudMask[np.logical_and(~__Below0CloudMask,self._cloudMask==30)] = 20 # everything above Melting layer height is cirrus
+        self._cloudMask[np.logical_and(__Below0CloudMask,self._cloudMask==30)] = 25  # everything below Melting layer height is cumulus
+        self._cloudMask[np.logical_and(~__Below0CloudBeard,self._cloudMask==-50)] = np.nan  # cloud-beards just occur below melting layer height
+        del __Below0CloudMask, __Below0CloudBeard
+
+
 
     def __getRainMask(self):
         self._rainMask[self._rainMask > -99999] = np.nan # set complete array to nan
@@ -95,12 +130,13 @@ class RadarClass:
         self._rainMask[np.logical_and(self.VEL() <= -1,self._Zf > 0)] = self._Zf[np.logical_and(self.VEL() <= -1,self._Zf > 0)]  # rain
 
         # Precipitation only below melting-layer:
-
-        self.Below0C = [self.Below0C == -99999][0]
+        __Below0C = np.asarray(self._rainMask)
+        __Below0C = [__Below0C == -99999][0]
         for i in range(len(self._time)):
-            self.Below0C[i][np.where(self._range < self._MeltHeight[i])] = True
+            __Below0C[i][np.where(self._range < self._MeltHeight[i])] = True
 
-        self._rainMask[~self.Below0C] = np.nan
+        self._rainMask[~__Below0C] = np.nan
+        del __Below0C
 
         # Marshall-Palmer z-R relationship:
         # RR = 0.036 * 10^(0.0625 * dBZ)
@@ -108,9 +144,6 @@ class RadarClass:
 
         # throw away to small values
         self._rainRate[self._rainRate < 0.1] = np.nan
-
-    def below(self):
-        return self.Below0C
 
     def print_nc_infos(self, nc):
         print(nc)
@@ -160,25 +193,35 @@ class RadarClass:
         return self._rainRate
 
 
+
 # ----------------------------------------------------------------------------------------------------------------------
 
 def contourf_plot(MBR2, value):
-    fig = plt.figure(figsize=(16, 9))
-    ax1 = fig.add_subplot(211)
-    ax2 = fig.add_subplot(212)
-    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), MBR2.cloudMask().transpose(), cmap="jet", label="Cloudmask")
+    fig = plt.figure(figsize=(16, 13))
+    ax1 = fig.add_subplot(212)
+    # ax2 = fig.add_subplot(211)
+    ax3 = fig.add_subplot(211)
+
+    cf3 = ax3.contourf(MBR2.time(), MBR2.range(), MBR2.Zf().transpose(), cmap="jet", label="Reflectivity")
+    ax3.plot(MBR2.time(), MBR2.MeltHeight(), color='black', ls="--", label="Melting layer hight")
+    ax3.legend(loc="best")
+    ax3.set_ylim(0, 20000)
+    fig.colorbar(cf3, ax=ax3, label="[dBZ]")
+    ax3.set_title("Reflectivity")
+
+    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), MBR2.cloudMask().transpose(), cmap="gist_ncar", label="Cloudmask")
     ax1.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
     ax1.legend(loc="best")
-    ax1.set_ylim(0, 14000)
-    fig.colorbar(cf1,ax=ax1, label="[dBZ]")
+    ax1.set_ylim(0, 20000)
+    fig.colorbar(cf1,ax=ax1, label="CloudMaskValue")
     ax1.set_title("Cloudmask")
 
-    cf2 = ax2.contourf(MBR2.time(), MBR2.range(), value.transpose(), cmap="jet", label="Rain rate")
-    ax2.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
-    ax2.set_ylim(0, 14000)
-    fig.colorbar(cf2,ax=ax2,label="[mm/h]")
-    ax2.legend(loc="best")
-    ax2.set_title("Precipitation rate")
+    # cf2 = ax2.contourf(MBR2.time(), MBR2.range(), value.transpose(), cmap="jet", label="Rain rate")
+    # ax2.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
+    # ax2.set_ylim(0, 5000)
+    # fig.colorbar(cf2,ax=ax2,label="[mm/h]")
+    # ax2.legend(loc="best")
+    # ax2.set_title("Precipitation rate")
 
 # ----------------------------------------------------------------------------------------------------------------------
 

@@ -75,7 +75,7 @@ p1.line(x="x", y="y", source=meltsource, line_color="black", line_dash="dashed",
 
 contourlist = []
 colorbarlist = []
-def contourfPlot(Radar_var,name, minmax=None):
+def contourfPlot(Radar_var,name, minmax=None,steps=100,colormap="jet"):
     # ========== get Colors =====================
     if minmax == None:
         max_dbz = np.nanmax(Radar_var)
@@ -85,7 +85,7 @@ def contourfPlot(Radar_var,name, minmax=None):
 
 
     rangeGateHeight = Radar.range()[2] - Radar.range()[1]
-    rgb = getColormapAsList()
+    rgb = getColormapAsList(steps,colormap)
 
     # ========== prepare data for plotting ==============
     df = pd.DataFrame(Radar_var, index=Radar.time(), columns=Radar.range())
@@ -116,7 +116,7 @@ def contourfPlot(Radar_var,name, minmax=None):
     colorbarlist.append(color_bar)
 
 
-contourfPlot(Radar.cloudMask(),"cloudMask")
+contourfPlot(Radar.cloudMask(),"cloudMask",steps=5)
 contourfPlot(Radar.rainRate(),"rainRate",minmax=(0,10))
 
 colorbarlist[0].title = "Cloudmask-value"
