@@ -53,12 +53,14 @@ class RadarClass:
         """
         nc = Dataset(nc_FilePath)
         self._time = nc.variables['time'][:].copy()  # time in sec since 1970
+        self._BCOtime = nc.variables["bco_day"][:].copy()
         self._range = nc.variables['range'][:].copy()  # range in m
         self._Zf = nc.variables['Zf'][:].copy()  # filtered reflectivity
         self._MeltHeight = nc.variables['MeltHei'][:].copy()  # Height of the meltinglayer in m
         self._VEL = nc.variables['VEL'][:].copy()  # vertical velocity of all hydrometeors
         self._VELg = nc.variables['VELg'][:].copy() # Doppler velocity of all targets
-        self._LDR = nc.variables['LDR'][:].copy()
+        self._LDR = nc.variables['LDR'][:].copy() # Linear depolarization rate of all Hydrometeors
+        self._LDRg = nc.variables['LDRg'][:].copy() # Linear depolarization rate of all targets
         self.print_nc_infos(nc)
         nc.close()
 
@@ -89,35 +91,35 @@ class RadarClass:
         """
         Creates a cloud mask.
         Values stand for:
-        -50 = cloud-beard
-        0 = rain
-        10 = updraft in cloud
-        20 = cloud above melting layer
-        25 = cloud below melting layer
+        0 = cloud-beard
+        1 = rain
+        2 = cloud above melting layer
+        3 = cloud below melting layer
 
         :return:
         """
         # TODO: Unterscheidung zwischen Cirrus und Cumulus via LDR and Melting Layer hight
 
         self._cloudMask[self._cloudMask > -99999] = np.nan # set complete array to nan
-        self._cloudMask[np.logical_and(self.VEL() < -1, self._Zf <= 0)] = 10# downdraft in cloud
+        # self._cloudMask[np.logical_and(self.VEL() < -1, self._Zf <= 0)] = 0# downdraft in cloud
         self._cloudMask[np.logical_and((self.Zf() > -50), (self.VEL() > -1))] = 30  # cloud
-        self._cloudMask[self.Zf() <= -50] = -50  # cloud-beards
+        self._cloudMask[self.Zf() <= -50] = 0  # cloud-beards
 
-        self._cloudMask[self.VEL() <= -1] = 0  # rain
+        self._cloudMask[self.VEL() <= -1] = 1  # rain
 
         __Below0CloudMask = np.asarray(self._cloudMask).copy()
         __Below0CloudMask = [__Below0CloudMask == -99999][0]
         __Below0CloudBeard = np.asarray(self._cloudMask).copy()
         __Below0CloudBeard = [__Below0CloudBeard == -99999][0]
 
+
         for i in range(len(self._time)):
             __Below0CloudMask[i][np.where(self._range < self._MeltHeight[i])] = True
             __Below0CloudBeard[i][np.where(self._range < self._MeltHeight[i])] = True
 
-        self._cloudMask[np.logical_and(~__Below0CloudMask,self._cloudMask==30)] = 20 # everything above Melting layer height is cirrus
-        self._cloudMask[np.logical_and(__Below0CloudMask,self._cloudMask==30)] = 25  # everything below Melting layer height is cumulus
-        self._cloudMask[np.logical_and(~__Below0CloudBeard,self._cloudMask==-50)] = np.nan  # cloud-beards just occur below melting layer height
+        self._cloudMask[np.logical_and(~__Below0CloudMask,self._cloudMask==30)] = 2 # everything above Melting layer height is cirrus
+        self._cloudMask[np.logical_and(__Below0CloudMask,self._cloudMask==30)] = 3  # everything below Melting layer height is cumulus
+        self._cloudMask[np.logical_and(~__Below0CloudBeard,self._cloudMask==0)] = np.nan  # cloud-beards just occur below melting layer height
         del __Below0CloudMask, __Below0CloudBeard
 
 
@@ -192,15 +194,24 @@ class RadarClass:
     def rainRate(self):
         return self._rainRate
 
+    def LDR(self):
+        return self._LDR
+
+    def LDRg(self):
+        return self._LDRg
+
+    def BCOtime(self):
+        return self._BCOtime
+
 
 
 # ----------------------------------------------------------------------------------------------------------------------
 
 def contourf_plot(MBR2, value):
-    fig = plt.figure(figsize=(16, 13))
-    ax1 = fig.add_subplot(212)
-    # ax2 = fig.add_subplot(211)
-    ax3 = fig.add_subplot(211)
+    fig = plt.figure(figsize=(16, 10))
+    ax1 = fig.add_subplot(312)
+    ax2 = fig.add_subplot(313)
+    ax3 = fig.add_subplot(311)
 
     cf3 = ax3.contourf(MBR2.time(), MBR2.range(), MBR2.Zf().transpose(), cmap="jet", label="Reflectivity")
     ax3.plot(MBR2.time(), MBR2.MeltHeight(), color='black', ls="--", label="Melting layer hight")
@@ -209,19 +220,43 @@ def contourf_plot(MBR2, value):
     fig.colorbar(cf3, ax=ax3, label="[dBZ]")
     ax3.set_title("Reflectivity")
 
-    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), MBR2.cloudMask().transpose(), cmap="gist_ncar", label="Cloudmask")
+    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), MBR2.cloudMask().transpose(), cmap="jet", label="Cloudmask")
     ax1.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
     ax1.legend(loc="best")
     ax1.set_ylim(0, 20000)
-    fig.colorbar(cf1,ax=ax1, label="CloudMaskValue")
+    cb1 = fig.colorbar(cf1,ax=ax1, label="CloudMaskValue")
     ax1.set_title("Cloudmask")
 
-    # cf2 = ax2.contourf(MBR2.time(), MBR2.range(), value.transpose(), cmap="jet", label="Rain rate")
-    # ax2.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
-    # ax2.set_ylim(0, 5000)
-    # fig.colorbar(cf2,ax=ax2,label="[mm/h]")
-    # ax2.legend(loc="best")
-    # ax2.set_title("Precipitation rate")
+    # labels = [item.get_text() for item in cb1.get_ticklabels()]
+    cb1.set_clim(0,3)
+    cb1.set_ticks([0,1,1.8,3])
+    cb1.set_ticklabels(["Cloudbeard","Rain","Cirrus","Cumulus"])
+
+
+    cf2 = ax2.contourf(MBR2.time(), MBR2.range(), value.transpose(), cmap="jet", label="Rain rate")
+    ax2.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
+    ax2.set_ylim(0, 20000)
+    fig.colorbar(cf2,ax=ax2,label="[mm/h]")
+    ax2.legend(loc="best")
+    ax2.set_title("Precipitation rate")
+
+def plotCloudmask(MBR2):
+    fig = plt.figure(figsize=(18, 10))
+    ax1 = fig.add_subplot(111)
+
+    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), MBR2.cloudMask().transpose(), cmap="jet", label="Cloudmask")
+    ax1.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
+    ax1.legend(loc="best")
+    ax1.set_ylim(0, 20000)
+    cb1 = fig.colorbar(cf1,ax=ax1, label="Cloud classification")
+    ax1.set_title("Cloudmask")
+
+    # labels = [item.get_text() for item in cb1.get_ticklabels()]
+    cb1.set_clim(0,3)
+    cb1.set_ticks([0,1,1.8,3])
+    cb1.set_ticklabels(["Cloudbeard","Rain","Cirrus","Cumulus"])
+
+    plt.savefig('Cloudmask.png')
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -245,9 +280,6 @@ def getColorFromValue(min, max, array, cmap="jet"):
     return color
 
 
-
-
-
 def getColormapAsList(steps=100,cmap="jet"):
     def clamp(x):
         return int(max(0, min(x, 255)))
@@ -262,8 +294,94 @@ def getColormapAsList(steps=100,cmap="jet"):
 
     return colors
 
+def getValuesInArray(array):
+    value_list = []
+    for i in range(len(array)):
+        for element in array[i]:
+            if (not element in value_list) and (not np.isnan(element)):
+                value_list.append(element)
+
+    return value_list
 
 
+def create_netCDF(Radar,nc_name, path_name=''):
+    """
+
+    :param nc_name: Name of the netCDF4 file
+    :param path_name: Where the netCDF4 file will be written
+
+    """
+    from netCDF4 import Dataset
+    import time
+    import os
+
+    MISSING_VALUE = -999
+
+    nc = Dataset(path_name + nc_name, mode='w', format='NETCDF4')
+
+    strftime = []
+    for i in range(len(Radar.time())):
+        strftime.append(Radar.time()[i].strftime("%Y%m%d%H%M%S"))
+
+    numtime = np.asarray(Radar.time("ut"), dtype="f8")
+    strftime = np.asarray(strftime, dtype="S14")
+    CM = np.asarray(Radar.cloudMask(),dtype="f8")
+    RM = np.asarray(Radar.rainRate(),dtype="f8")
+    range_values = np.asarray(Radar.range(),dtype="f4")
+    BCOtime = np.asarray(Radar.BCOtime(),dtype="f8")
+
+    # Create global attributes
+    nc.location = "The Barbados Cloud Observatory, Deebles Point, Barbados"
+    nc.converted_by = "Tobias Machnitzki (tobias.machnitzki@mpimet.mpg.de)"
+    nc.institution = "Max Planck Institute for Meteorology, Hamburg"
+    nc.created_with = os.path.basename(__file__) + " with its last modification on " + time.ctime(
+        os.path.getmtime(os.path.realpath(__file__)))
+    nc.creation_date = time.asctime()
+    nc.version = "1.0.0"
+
+    # Create dimensions
+    time_dim = nc.createDimension('time', None)
+    range_dim = nc.createDimension('range',None)
+
+    # Create variable
+    time_var = nc.createVariable('time', 'f8', ('time',))
+    time_var.units = "Seconds since 1970-1-1 0:00:00 UTC"
+    time_var.CoordinateAxisType = "Time"
+    time_var.calendar = "Standard"
+    time_var.Fill_value = "-999"
+
+    range_var = nc.createVariable('range','f4', ('range',))
+    range_var.units = "m"
+    range_var.CoordinateAxisType = "Height"
+    range_var.long_name = "Range from Antenna to the Centre of each Range Gate"
+    range_var.Fill_value = "-999"
+
+    strftime_var = nc.createVariable('strftime', 'S8', ('time',))
+    strftime_var.units = "YYYYMMDDHHMMSS"
+    strftime_var.CoordinateAxisType = "Time"
+
+    BCOtime_var = nc.createVariable('bco_day','f8',('time',))
+    BCOtime_var.long_name = "Days since start of Barbados Cloud Observatory measurements"
+    BCOtime_var.units = "Days since 2010-4-1 00:00:00 (UTC)"
+
+    CM_var = nc.createVariable('CloudMask','f4',('time','range'))
+    CM_var.long_name = "Derived cloud mask"
+    CM_var.description = "\n      0=Cloudbeard\n      1=Rain\n      2=Cumulus\n      3=Cirrus\n"
+
+    RM_var = nc.createVariable('RainMask','f4',('time','range'))
+    RM_var.long_name = "Derived rain rate from Marshall-Palmer relation"
+
+
+    # Fill varaibles with values
+    time_var[:] = numtime[:]
+    strftime_var[:] = strftime[:]
+    range_var[:] = Radar.range()[:]
+    BCOtime_var[:] = Radar.BCOtime()[:]
+
+    CM_var[:] = CM[:]
+    RM_var[:] = RM[:]
+
+    nc.close()
 
 if __name__ == "__main__":
 
@@ -276,6 +394,7 @@ if __name__ == "__main__":
     datestr = str(args.datestr)
     print(datestr)
     datestr = datestr[2:]
+
 
     # Set nc-file depending on parsed argument:
     DEVICE = str(args.device)
@@ -291,7 +410,13 @@ if __name__ == "__main__":
         print("InputError: --device can be either MBR2 or KATRIN")
         sys.exit(1)
 
+    SAVE_PATH = ""
+    SAVE_FILE = NC_FILE[:-3] + "_CloudMask.nc"
+
     # Initiate class:
     Radar = RadarClass(NC_PATH + NC_FILE)
 
-    contourf_plot(Radar, Radar.rainRate())
+    create_netCDF(Radar,SAVE_FILE,SAVE_PATH)
+
+    # contourf_plot(Radar, Radar.rainRate())
+    # plotCloudmask(Radar)

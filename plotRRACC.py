@@ -102,6 +102,7 @@ def contourfPlot(Radar_var,name, minmax=None,steps=100,colormap="jet"):
     cf = p1.rect(x="time", y="range", height=rangeGateHeight, width=timedelta(seconds=time_resolution), source=source,
                  fill_color={'field': 'data', 'transform': mapper}, legend=name )
     cf.glyph.line_color = cf.glyph.fill_color
+    cf.glyph.line_color = None
 
     contourlist.append(cf)
     p1.plot_width = 1300
