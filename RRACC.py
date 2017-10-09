@@ -15,7 +15,9 @@ from calendar import timegm
 import argparse
 import sys
 from joblib import Parallel, delayed
-
+from scipy.ndimage.morphology import binary_closing,binary_opening
+from scipy.sparse.csgraph import connected_components
+from scipy import ndimage
 
 # ----------------------------------------------------------------------------------------------------------------------
 # =========================================
@@ -240,11 +242,12 @@ def contourf_plot(MBR2, value):
     ax2.legend(loc="best")
     ax2.set_title("Precipitation rate")
 
-def plotCloudmask(MBR2):
+def plotCloudmask(MBR2,value):
     fig = plt.figure(figsize=(18, 10))
-    ax1 = fig.add_subplot(111)
+    ax1 = fig.add_subplot(212)
+    ax2 = fig.add_subplot(211)
 
-    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), MBR2.cloudMask().transpose(), cmap="jet", label="Cloudmask")
+    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), value.transpose(), cmap="jet", label="Cloudmask")
     ax1.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
     ax1.legend(loc="best")
     ax1.set_ylim(0, 20000)
@@ -255,6 +258,18 @@ def plotCloudmask(MBR2):
     cb1.set_clim(0,3)
     cb1.set_ticks([0,1,1.8,3])
     cb1.set_ticklabels(["Cloudbeard","Rain","Cirrus","Cumulus"])
+
+    cf2 = ax2.contourf(MBR2.time(), MBR2.range(), MBR2.cloudMask().transpose(), cmap="jet", label="Cloudmask")
+    ax2.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
+    ax2.legend(loc="best")
+    ax2.set_ylim(0, 20000)
+    cb2 = fig.colorbar(cf2,ax=ax2, label="Cloud classification")
+    ax2.set_title("Cloudmask")
+
+    # labels = [item.get_text() for item in cb1.get_ticklabels()]
+    cb2.set_clim(0,3)
+    cb2.set_ticks([0,1,1.8,3])
+    cb2.set_ticklabels(["Cloudbeard","Rain","Cirrus","Cumulus"])
 
     plt.savefig('Cloudmask.png')
 
@@ -304,7 +319,7 @@ def getValuesInArray(array):
     return value_list
 
 
-def create_netCDF(Radar,nc_name, path_name=''):
+def create_netCDF(Radar,NC_FILE,nc_name, path_name=''):
     """
 
     :param nc_name: Name of the netCDF4 file
@@ -338,6 +353,7 @@ def create_netCDF(Radar,nc_name, path_name=''):
         os.path.getmtime(os.path.realpath(__file__)))
     nc.creation_date = time.asctime()
     nc.version = "1.0.0"
+    nc.derived_from = NC_FILE
 
     # Create dimensions
     time_dim = nc.createDimension('time', None)
@@ -366,7 +382,7 @@ def create_netCDF(Radar,nc_name, path_name=''):
 
     CM_var = nc.createVariable('CloudMask','f4',('time','range'))
     CM_var.long_name = "Derived cloud mask"
-    CM_var.description = "\n      0=Cloudbeard\n      1=Rain\n      2=Cumulus\n      3=Cirrus\n"
+    CM_var.description = "\n      0=Cloudbeard\n      1=Rain\n      2=Cirrus\n      3=Cumulus\n"
 
     RM_var = nc.createVariable('RainMask','f4',('time','range'))
     RM_var.long_name = "Derived rain rate from Marshall-Palmer relation"
@@ -382,6 +398,25 @@ def create_netCDF(Radar,nc_name, path_name=''):
     RM_var[:] = RM[:]
 
     nc.close()
+
+def smooth(Radar):
+    CumulusCloudMask = Radar.cloudMask().copy()
+    CumulusCloudMask[CumulusCloudMask != 3] = np.nan
+    CumulusCloudMask[np.isnan(CumulusCloudMask)] = 0
+    CumulusCloudMask =  binary_opening(CumulusCloudMask, iterations=2).astype(int)
+    CumulusCloudMask = binary_closing(CumulusCloudMask, iterations=10).astype(float)
+    CumulusCloudMask[CumulusCloudMask == 0] = np.nan
+
+    CirrusCloudMask = Radar.cloudMask().copy()
+    CirrusCloudMask[CirrusCloudMask != 2] = np.nan
+    CirrusCloudMask[np.isnan(CirrusCloudMask)] = 0
+    CirrusCloudMask =  binary_opening(CirrusCloudMask, iterations=5).astype(int)
+    CirrusCloudMask = binary_closing(CirrusCloudMask, iterations=30).astype(float)
+    CirrusCloudMask[CirrusCloudMask == 0] = np.nan
+
+    CM_smooth = CirrusCloudMask.copy()
+    CM_smooth[np.logical_or((CirrusCloudMask == 1),(CumulusCloudMask==1))] = 1
+    return CM_smooth
 
 if __name__ == "__main__":
 
@@ -416,7 +451,17 @@ if __name__ == "__main__":
     # Initiate class:
     Radar = RadarClass(NC_PATH + NC_FILE)
 
-    create_netCDF(Radar,SAVE_FILE,SAVE_PATH)
+    # create_netCDF(Radar,NC_FILE,SAVE_FILE,SAVE_PATH)
 
     # contourf_plot(Radar, Radar.rainRate())
-    # plotCloudmask(Radar)
+    smoothed = smooth(Radar)
+    smoothed[np.isnan(smoothed)] = 0
+    mask = smoothed > np.mean(smoothed)
+    structure_array = np.ones([3,3])
+    label_im, nb_labels = ndimage.label(mask, structure=structure_array)
+    print("Clouds in picture: %i" %nb_labels)
+    label_im = label_im.astype(float)
+    label_im[label_im == 0] = np.nan
+    plt.contourf(label_im.transpose())
+
+    # plotCloudmask(Radar, mask)
