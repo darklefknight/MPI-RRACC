@@ -4,7 +4,8 @@ Created by Tobias Machnitzki (tobias.machnitzki@mpimet.mpg.de) on the 27.10.2017
 RRACC stands for "Radar Rain and Cloud Classification"
 
 """
-
+import matplotlib
+matplotlib.use('Agg')
 import numpy as np
 from netCDF4 import Dataset
 import matplotlib.pyplot as plt
@@ -18,6 +19,7 @@ from joblib import Parallel, delayed
 from scipy.ndimage.morphology import binary_closing,binary_opening
 from scipy.sparse.csgraph import connected_components
 from scipy import ndimage
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # =========================================
@@ -76,10 +78,16 @@ class RadarClass:
 
         # functions to be executed on initiation:
         self.__time2obj()  # creates datetime-objects from "time"
+        if self.instrument() == "MBR2":
+            self.__filter()
+
         self.__getCloudMask()  # creates a cloudmask
         self.__getRainMask()  # creates a rainmask
         self.__getNotSpheric() #gets a mask for all not spheric particles
 
+
+    def __filter(self):
+        self._Zf[self._Zf < -62] = np.nan
 
     def __time2obj(self):
         for element in self._time:
