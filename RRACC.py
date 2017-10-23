@@ -63,6 +63,7 @@ class RadarClass:
         self._VELg = nc.variables['VELg'][:].copy() # Doppler velocity of all targets
         self._LDR = nc.variables['LDR'][:].copy() # Linear depolarization rate of all Hydrometeors
         self._LDRg = nc.variables['LDRg'][:].copy() # Linear depolarization rate of all targets
+        self._instrument = nc.instrument
         self.print_nc_infos(nc)
         nc.close()
 
@@ -205,6 +206,9 @@ class RadarClass:
     def BCOtime(self):
         return self._BCOtime
 
+    def instrument(self):
+        return self._instrument.split()[0]
+
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -270,8 +274,11 @@ def plotCloudmask(MBR2,value):
     cb2.set_clim(0,3)
     cb2.set_ticks([0,1,1.8,3])
     cb2.set_ticklabels(["Cloudbeard","Rain","Cirrus","Cumulus"])
-
-    plt.savefig('Cloudmask.png')
+    instrument = MBR2.instrument()
+    date = MBR2.time()[0].strftime("%y%m%d")
+    savepath = instrument + "/"
+    plt.savefig(savepath + 'Cloudmask_' + instrument + '_' + date + '.png')
+    plt.close(fig)
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -400,6 +407,13 @@ def create_netCDF(Radar,NC_FILE,nc_name, path_name=''):
     nc.close()
 
 def smooth(Radar):
+    """
+    This function uses binary opening and closing to get rid of weak signals which could be false interpreted as clouds. (binary opening)
+    Furthermore it brings together parts of a cloud into one patch, so that it will later be counted as one cloud. (binary closing)
+
+    :param Radar: Object of the Radar-class
+    :return: smoothed cloudmask. Do only use this for counting clouds.
+    """
     CumulusCloudMask = Radar.cloudMask().copy()
     CumulusCloudMask[CumulusCloudMask != 3] = np.nan
     CumulusCloudMask[np.isnan(CumulusCloudMask)] = 0
@@ -418,6 +432,19 @@ def smooth(Radar):
     CM_smooth[np.logical_or((CirrusCloudMask == 1),(CumulusCloudMask==1))] = 1
     return CM_smooth
 
+def countClouds(Radar):
+    smoothed = smooth(Radar)
+    smoothed[np.isnan(smoothed)] = 0
+    mask = smoothed > np.mean(smoothed)
+    structure_array = np.ones([3,3])
+    label_im, nb_labels = ndimage.label(mask, structure=structure_array)
+    print("Clouds in picture: %i" %nb_labels)
+    label_im = label_im.astype(float)
+    label_im[label_im == 0] = np.nan
+    plt.contourf(label_im.transpose())
+    return mask
+
+
 if __name__ == "__main__":
 
     # Get parsed arguments:
@@ -435,7 +462,10 @@ if __name__ == "__main__":
     DEVICE = str(args.device)
     if DEVICE == "MBR2":
         NC_PATH = "/data/mpi/mpiaes/obs/m300517/RadarCorrection/MBR2_out/"
-        NC_FILE = "MMCR__MBR__Spectral_Moments__10s__155m-25km__" + datestr + ".nc"
+        # NC_FILE = "MMCR__MBR__Spectral_Moments__10s__155m-25km__" + datestr + ".nc"
+        NC_FILE = "MMCR__MBR__Spectral_Moments__10s__155m-14km__" + datestr + ".nc"
+
+
 
     elif DEVICE == "KATRIN":
         NC_PATH = "/data/mpi/mpiaes/obs/m300517/RadarCorrection/KATRIN_out/"
@@ -445,6 +475,8 @@ if __name__ == "__main__":
         print("InputError: --device can be either MBR2 or KATRIN")
         sys.exit(1)
 
+    print(NC_PATH + NC_FILE)
+
     SAVE_PATH = ""
     SAVE_FILE = NC_FILE[:-3] + "_CloudMask.nc"
 
@@ -453,15 +485,8 @@ if __name__ == "__main__":
 
     # create_netCDF(Radar,NC_FILE,SAVE_FILE,SAVE_PATH)
 
-    # contourf_plot(Radar, Radar.rainRate())
-    smoothed = smooth(Radar)
-    smoothed[np.isnan(smoothed)] = 0
-    mask = smoothed > np.mean(smoothed)
-    structure_array = np.ones([3,3])
-    label_im, nb_labels = ndimage.label(mask, structure=structure_array)
-    print("Clouds in picture: %i" %nb_labels)
-    label_im = label_im.astype(float)
-    label_im[label_im == 0] = np.nan
-    plt.contourf(label_im.transpose())
+    # contourf_plot(Radar, Radar.rainRate
+    # mask = countClouds(Radar)
 
-    # plotCloudmask(Radar, mask)
+
+    plotCloudmask(Radar, Radar.Zf())
