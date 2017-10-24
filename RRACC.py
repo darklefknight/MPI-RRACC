@@ -286,7 +286,7 @@ def plotCloudmask(MBR2,value,cloudcount):
     date = MBR2.time()[0].strftime("%y%m%d")
     savepath = instrument + "/"
     plt.savefig(savepath + 'Cloudmask_' + instrument + '_' + date + '.png')
-    # plt.close(fig)
+    plt.close(fig)
 
 # ----------------------------------------------------------------------------------------------------------------------
 
