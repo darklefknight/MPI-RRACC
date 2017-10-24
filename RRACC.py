@@ -5,7 +5,7 @@ RRACC stands for "Radar Rain and Cloud Classification"
 
 """
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import numpy as np
 from netCDF4 import Dataset
 import matplotlib.pyplot as plt
@@ -254,22 +254,22 @@ def contourf_plot(MBR2, value):
     ax2.legend(loc="best")
     ax2.set_title("Precipitation rate")
 
-def plotCloudmask(MBR2,value):
+def plotCloudmask(MBR2,value,cloudcount):
     fig = plt.figure(figsize=(18, 10))
     ax1 = fig.add_subplot(212)
     ax2 = fig.add_subplot(211)
 
-    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), value.transpose(), cmap="jet", label="Cloudmask")
-    ax1.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
+    cf1 = ax1.contourf(MBR2.time(), MBR2.range(), value.transpose(), cmap="jet", label="Cloudmask for counting")
+    ax1.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight \nClouds counted=%i"%cloudcount)
     ax1.legend(loc="best")
     ax1.set_ylim(0, 20000)
-    cb1 = fig.colorbar(cf1,ax=ax1, label="Cloud classification")
     ax1.set_title("Cloudmask")
+    cb1 = fig.colorbar(cf1,ax=ax1, label="Cloud Count")
 
     # labels = [item.get_text() for item in cb1.get_ticklabels()]
-    cb1.set_clim(0,3)
-    cb1.set_ticks([0,1,1.8,3])
-    cb1.set_ticklabels(["Cloudbeard","Rain","Cirrus","Cumulus"])
+    # cb1.set_clim(0,3)
+    # cb1.set_ticks([0,1,1.8,3])
+    # cb1.set_ticklabels(["Cloudbeard","Rain","Cirrus","Cumulus"])
 
     cf2 = ax2.contourf(MBR2.time(), MBR2.range(), MBR2.cloudMask().transpose(), cmap="jet", label="Cloudmask")
     ax2.plot(MBR2.time(),MBR2.MeltHeight(),color='black',ls="--",label="Melting layer hight")
@@ -286,7 +286,7 @@ def plotCloudmask(MBR2,value):
     date = MBR2.time()[0].strftime("%y%m%d")
     savepath = instrument + "/"
     plt.savefig(savepath + 'Cloudmask_' + instrument + '_' + date + '.png')
-    plt.close(fig)
+    # plt.close(fig)
 
 # ----------------------------------------------------------------------------------------------------------------------
 
@@ -432,8 +432,9 @@ def smooth(Radar):
     CirrusCloudMask = Radar.cloudMask().copy()
     CirrusCloudMask[CirrusCloudMask != 2] = np.nan
     CirrusCloudMask[np.isnan(CirrusCloudMask)] = 0
-    CirrusCloudMask =  binary_opening(CirrusCloudMask, iterations=5).astype(int)
-    CirrusCloudMask = binary_closing(CirrusCloudMask, iterations=30).astype(float)
+    CirrusCloudMask = binary_closing(CirrusCloudMask, iterations=30).astype(int)
+    CirrusCloudMask =  binary_opening(CirrusCloudMask, iterations=5).astype(float)
+
     CirrusCloudMask[CirrusCloudMask == 0] = np.nan
 
     CM_smooth = CirrusCloudMask.copy()
@@ -449,8 +450,8 @@ def countClouds(Radar):
     print("Clouds in picture: %i" %nb_labels)
     label_im = label_im.astype(float)
     label_im[label_im == 0] = np.nan
-    plt.contourf(label_im.transpose())
-    return mask
+    # plt.contourf(label_im.transpose())
+    return label_im, nb_labels
 
 
 if __name__ == "__main__":
@@ -494,7 +495,6 @@ if __name__ == "__main__":
     # create_netCDF(Radar,NC_FILE,SAVE_FILE,SAVE_PATH)
 
     # contourf_plot(Radar, Radar.rainRate
-    # mask = countClouds(Radar)
+    mask,count = countClouds(Radar)
 
-
-    plotCloudmask(Radar, Radar.Zf())
+    plotCloudmask(Radar, mask,count)

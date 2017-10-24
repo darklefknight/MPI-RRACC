@@ -10,4 +10,4 @@ def main(date,device):
 
 if __name__ == "__main__":
     device = "MBR2"
-    Parallel(n_jobs=-1,verbose=5)(delayed(main)(date,device) for date in range(20150801,20150831,1) )
+    Parallel(n_jobs=1,verbose=5)(delayed(main)(date,device) for date in range(20150801,20150831,1) )

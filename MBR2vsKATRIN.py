@@ -5,6 +5,7 @@ from datetime import datetime as dt
 import numpy as np
 from joblib import Parallel,delayed
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
 def daterange(start_date, end_date):
@@ -48,6 +49,16 @@ if __name__ == "__main__":
 
     zfs = [x for x in range(-100,100,1)]
 
-    MBR2_array = np.zeros([zfs,MBR2.range()],dtype="f8")
-    KATRIN_array = np.zeros([zfs, KATRIN.range()],dtype="f8")
+    MBR2_array = np.zeros([len(zfs),len(MBR2.range())],dtype="f8")
+    KATRIN_array = np.zeros([len(zfs), len(KATRIN.range())],dtype="f8")
+
+    df_K_Zf = pd.DataFrame(KATRIN.Zf().transpose())
+    df_M_Zf = pd.DataFrame(MBR2.Zf().transpose())
+
+    df_K = pd.DataFrame()
+    df_M = pd.DataFrame()
+
+    for i in range(-100,100,1):
+        df_K[i] = df_K_Zf.isin([i]).sum(1)
+        df_M[i] = df_M_Zf.isin([i]).sum(1)
 
